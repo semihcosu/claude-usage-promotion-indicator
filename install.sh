@@ -58,14 +58,12 @@ if (currentCmd === newCmd) {
   process.exit(0);
 }
 
-// Save the existing statusLine command (if any) so we can restore it on uninstall.
-// Only write if we haven't saved one before (don't overwrite an earlier save).
+// Save the existing statusLine command so we can restore it on uninstall.
+// Always overwrite so a re-install after manually adding a new statusLine captures it.
 const prevCmd = currentCmd || null;
-if (!fs.existsSync(configPath)) {
-  fs.writeFileSync(configPath, JSON.stringify({ command: prevCmd }, null, 2) + '\n');
-  if (prevCmd) {
-    process.stdout.write('Saved previous statusLine to ' + configPath + '\n');
-  }
+fs.writeFileSync(configPath, JSON.stringify({ command: prevCmd }, null, 2) + '\n');
+if (prevCmd) {
+  process.stdout.write('Saved previous statusLine to ' + configPath + '\n');
 }
 
 // Remove stale lowercase key written by an old version of this installer
