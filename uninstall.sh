@@ -5,8 +5,8 @@ INSTALL_DIR="${HOME}/.claude/scripts"
 SETTINGS_PATH="${HOME}/.claude/settings.json"
 COMBINED_CMD="node ${INSTALL_DIR}/combined-statusline.js"
 
-# Remove installed scripts
-for f in check-promo.js combined-statusline.js check-promo-prev.json; do
+# Remove installed scripts (check-promo-prev.json removed after settings restore)
+for f in check-promo.js combined-statusline.js; do
   fpath="${INSTALL_DIR}/${f}"
   if [ -f "${fpath}" ]; then
     rm "${fpath}"
@@ -68,5 +68,12 @@ if (prevCmd) {
 
 fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
 JSEOF
+
+# Clean up the saved previous config now that it's been restored
+prevconf="${INSTALL_DIR}/check-promo-prev.json"
+if [ -f "${prevconf}" ]; then
+  rm "${prevconf}"
+  printf 'Removed %s\n' "${prevconf}"
+fi
 
 printf 'Uninstalled. Restart Claude Code to deactivate.\n'
