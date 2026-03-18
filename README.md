@@ -2,6 +2,9 @@
 
 Shows a live indicator in your [Claude Code](https://claude.ai/code) status line during Anthropic's March 2026 usage promotion — 2× limits during off-peak hours.
 
+<img width="918" height="173" alt="Screenshot 2026-03-18 at 12 11 52" src="https://github.com/user-attachments/assets/12b1e251-7ff0-42b9-9cca-34d304449328" />
+
+
 **What you'll see:**
 
 | Time | Status line |
