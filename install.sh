@@ -3,11 +3,10 @@ set -e
 
 REPO="semihcosu/claude-usage-promotion-indicator"
 BRANCH="main"
-SCRIPT_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}/check-promo.js"
+BASE_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}"
 INSTALL_DIR="${HOME}/.claude/scripts"
-INSTALL_PATH="${INSTALL_DIR}/check-promo.js"
 SETTINGS_PATH="${HOME}/.claude/settings.json"
-STATUSLINE_CMD="node ${INSTALL_DIR}/check-promo.js"
+COMBINED_CMD="node ${INSTALL_DIR}/combined-statusline.js"
 
 # Require node
 if ! command -v node >/dev/null 2>&1; then
@@ -24,50 +23,61 @@ fi
 # Create install directory
 mkdir -p "${INSTALL_DIR}"
 
-# Download check-promo.js
+# Download scripts
 printf 'Downloading check-promo.js...\n'
-curl -fsSL "${SCRIPT_URL}" -o "${INSTALL_PATH}"
-printf 'Saved to %s\n' "${INSTALL_PATH}"
+curl -fsSL "${BASE_URL}/check-promo.js" -o "${INSTALL_DIR}/check-promo.js"
+
+printf 'Downloading combined-statusline.js...\n'
+curl -fsSL "${BASE_URL}/combined-statusline.js" -o "${INSTALL_DIR}/combined-statusline.js"
+
+printf 'Saved to %s\n' "${INSTALL_DIR}"
 
 # Patch ~/.claude/settings.json
-node - "${SETTINGS_PATH}" "${STATUSLINE_CMD}" <<'JSEOF'
+node - "${SETTINGS_PATH}" "${COMBINED_CMD}" "${INSTALL_DIR}/check-promo-prev.json" <<'JSEOF'
 const fs   = require('fs');
-const path = process.argv[2];
-const cmd  = process.argv[3];
+const path = require('path');
+
+const settingsPath = process.argv[2];
+const newCmd       = process.argv[3];
+const configPath   = process.argv[4];
 
 let settings = {};
-if (fs.existsSync(path)) {
+if (fs.existsSync(settingsPath)) {
   try {
-    settings = JSON.parse(fs.readFileSync(path, 'utf8'));
+    settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
   } catch (e) {
-    process.stderr.write('Error: ' + path + ' is not valid JSON. Fix it manually and re-run.\n');
+    process.stderr.write('Error: ' + settingsPath + ' is not valid JSON. Fix it manually and re-run.\n');
     process.exit(1);
   }
 }
 
-if (settings.statusline === cmd) {
+// Already installed
+const currentCmd = (settings.statusLine && settings.statusLine.command) || '';
+if (currentCmd === newCmd) {
   process.stdout.write('Already installed — nothing to do.\n');
   process.exit(0);
 }
 
-if (settings.statusline && settings.statusline !== cmd) {
-  process.stderr.write(
-    'Error: ' + path + ' already has a statusline set:\n' +
-    '  "' + settings.statusline + '"\n\n' +
-    'To install, remove that key manually:\n' +
-    '  1. Open ' + path + '\n' +
-    '  2. Delete the "statusline" line\n' +
-    '  3. Re-run the install command\n'
-  );
-  process.exit(1);
+// Save the existing statusLine command (if any) so we can restore it on uninstall.
+// Only write if we haven't saved one before (don't overwrite an earlier save).
+const prevCmd = currentCmd || null;
+if (!fs.existsSync(configPath)) {
+  fs.writeFileSync(configPath, JSON.stringify({ command: prevCmd }, null, 2) + '\n');
+  if (prevCmd) {
+    process.stdout.write('Saved previous statusLine to ' + configPath + '\n');
+  }
 }
 
-const dir = require('path').dirname(path);
+// Remove stale lowercase key written by an old version of this installer
+delete settings.statusline;
+
+// Set new statusLine (correct schema: object with type + command)
+settings.statusLine = { type: 'command', command: newCmd };
+
+const dir = path.dirname(settingsPath);
 if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-settings.statusline = cmd;
-fs.writeFileSync(path, JSON.stringify(settings, null, 2) + '\n');
+fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
 process.stdout.write('settings.json updated.\n');
 JSEOF
 
 printf '\nDone! Restart Claude Code to activate the status line.\n'
-printf 'Inspect the script: %s\n' "${SCRIPT_URL}"

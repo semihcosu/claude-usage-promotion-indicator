@@ -1,43 +1,72 @@
 #!/usr/bin/env sh
 set -e
 
-INSTALL_PATH="${HOME}/.claude/scripts/check-promo.js"
+INSTALL_DIR="${HOME}/.claude/scripts"
 SETTINGS_PATH="${HOME}/.claude/settings.json"
+COMBINED_CMD="node ${INSTALL_DIR}/combined-statusline.js"
 
-# Remove script file
-if [ -f "${INSTALL_PATH}" ]; then
-  rm "${INSTALL_PATH}"
-  printf 'Removed %s\n' "${INSTALL_PATH}"
-else
-  printf 'Script not found at %s — skipping.\n' "${INSTALL_PATH}"
-fi
+# Remove installed scripts
+for f in check-promo.js combined-statusline.js check-promo-prev.json; do
+  fpath="${INSTALL_DIR}/${f}"
+  if [ -f "${fpath}" ]; then
+    rm "${fpath}"
+    printf 'Removed %s\n' "${fpath}"
+  fi
+done
 
-# Remove statusline key from settings.json
+# Restore settings.json
 if [ ! -f "${SETTINGS_PATH}" ]; then
-  printf 'No settings.json found at %s — nothing to clean up.\n' "${SETTINGS_PATH}"
+  printf 'No settings.json found at %s — nothing to restore.\n' "${SETTINGS_PATH}"
   exit 0
 fi
 
-node - "${SETTINGS_PATH}" <<'JSEOF'
-const fs   = require('fs');
-const path = process.argv[2];
+node - "${SETTINGS_PATH}" "${COMBINED_CMD}" "${INSTALL_DIR}/check-promo-prev.json" <<'JSEOF'
+const fs = require('fs');
+
+const settingsPath = process.argv[2];
+const ourCmd       = process.argv[3];
+const configPath   = process.argv[4];
 
 let settings;
 try {
-  settings = JSON.parse(fs.readFileSync(path, 'utf8'));
+  settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
 } catch (e) {
-  process.stderr.write('Error: ' + path + ' is not valid JSON.\n');
+  process.stderr.write('Error: ' + settingsPath + ' is not valid JSON.\n');
   process.exit(1);
 }
 
-if (!('statusline' in settings)) {
-  process.stdout.write('No statusline key found in settings.json — nothing to remove.\n');
+// Remove stale lowercase key written by an old version of this installer
+let dirty = false;
+if ('statusline' in settings) {
+  delete settings.statusline;
+  dirty = true;
+  process.stdout.write('Removed stale statusline key.\n');
+}
+
+// Only restore/remove statusLine if it's still pointing at our combined script
+const currentCmd = (settings.statusLine && settings.statusLine.command) || '';
+if (currentCmd !== ourCmd) {
+  process.stdout.write('statusLine is not ours — leaving settings.json unchanged.\n');
+  if (dirty) fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
   process.exit(0);
 }
 
-delete settings.statusline;
-fs.writeFileSync(path, JSON.stringify(settings, null, 2) + '\n');
-process.stdout.write('Removed statusline from settings.json.\n');
+// Read saved previous statusLine (may not exist if config was already removed above)
+let prevCmd = null;
+try {
+  const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  prevCmd = cfg.command || null;
+} catch (_) {}
+
+if (prevCmd) {
+  settings.statusLine = { type: 'command', command: prevCmd };
+  process.stdout.write('Restored previous statusLine: ' + prevCmd + '\n');
+} else {
+  delete settings.statusLine;
+  process.stdout.write('Removed statusLine from settings.json.\n');
+}
+
+fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
 JSEOF
 
 printf 'Uninstalled. Restart Claude Code to deactivate.\n'
